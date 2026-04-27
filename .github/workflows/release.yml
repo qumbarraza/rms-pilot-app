@@ -1,0 +1,114 @@
+name: Release
+
+# Post-merge: build a single versioned, immutable artifact, publish it as a
+# GitHub Release, then auto-deploy that same artifact to Dev and Test.
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to create a Release
+
+jobs:
+  build:
+    runs-on: self-hosted
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute version
+        id: ver
+        shell: pwsh
+        run: |
+          $version = "0.1.${{ github.run_number }}"
+          "version=$version" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
+          Write-Host "Version: $version"
+
+      - name: Restore
+        shell: pwsh
+        run: dotnet restore App.sln
+
+      - name: Publish
+        shell: pwsh
+        run: |
+          dotnet publish App/App.csproj `
+            -c Release `
+            -p:Version=${{ steps.ver.outputs.version }} `
+            -p:InformationalVersion=${{ steps.ver.outputs.version }} `
+            -o ./publish `
+            --no-restore
+
+      - name: Zip artifact
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path ./publish/* `
+            -DestinationPath ./rms-pilot-app-${{ steps.ver.outputs.version }}.zip `
+            -Force
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: v${{ steps.ver.outputs.version }}
+          files: ./rms-pilot-app-${{ steps.ver.outputs.version }}.zip
+          generate_release_notes: true
+
+  deploy-dev:
+    needs: build
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download release artifact
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "v${{ needs.build.outputs.version }}" `
+            -R "${{ github.repository }}" `
+            -p "*.zip" --clobber
+
+      - name: Extract
+        shell: pwsh
+        run: |
+          if (Test-Path ./extracted) { Remove-Item ./extracted -Recurse -Force }
+          Expand-Archive `
+            -Path "rms-pilot-app-${{ needs.build.outputs.version }}.zip" `
+            -DestinationPath ./extracted `
+            -Force
+
+      - name: Deploy to Dev
+        shell: pwsh
+        run: pwsh -File ./deploy/deploy.ps1 -Environment dev -ArtifactPath ./extracted
+
+  deploy-test:
+    needs: [build, deploy-dev]
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download release artifact
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "v${{ needs.build.outputs.version }}" `
+            -R "${{ github.repository }}" `
+            -p "*.zip" --clobber
+
+      - name: Extract
+        shell: pwsh
+        run: |
+          if (Test-Path ./extracted) { Remove-Item ./extracted -Recurse -Force }
+          Expand-Archive `
+            -Path "rms-pilot-app-${{ needs.build.outputs.version }}.zip" `
+            -DestinationPath ./extracted `
+            -Force
+
+      - name: Deploy to Test
+        shell: pwsh
+        run: pwsh -File ./deploy/deploy.ps1 -Environment test -ArtifactPath ./extracted

@@ -1,0 +1,48 @@
+name: Branch Deploy (manual)
+
+# Pre-merge deploy: developer manually triggers a deploy of the current branch
+# to either Dev or Test for hands-on verification. Anyone can trigger their own
+# branch — last trigger wins the env.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options: [dev, test]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute branch version
+        id: ver
+        shell: pwsh
+        run: |
+          $branch = "${{ github.ref_name }}" -replace '[^a-zA-Z0-9.-]', '-'
+          if ($branch.Length -gt 30) { $branch = $branch.Substring(0, 30) }
+          $version = "0.0.${{ github.run_number }}"
+          "version=$version"           | Out-File -Append -FilePath $env:GITHUB_OUTPUT
+          "informational=$version-$branch" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
+
+      - name: Restore
+        shell: pwsh
+        run: dotnet restore App.sln
+
+      - name: Publish
+        shell: pwsh
+        run: |
+          dotnet publish App/App.csproj `
+            -c Release `
+            -p:Version=${{ steps.ver.outputs.version }} `
+            -p:InformationalVersion=${{ steps.ver.outputs.informational }} `
+            -o ./publish `
+            --no-restore
+
+      - name: Deploy to ${{ inputs.environment }}
+        shell: pwsh
+        run: pwsh -File ./deploy/deploy.ps1 -Environment "${{ inputs.environment }}" -ArtifactPath "./publish"

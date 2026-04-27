@@ -1,0 +1,42 @@
+name: Promote to Stage
+
+# Manual promotion of an existing release artifact to Stage.
+# The 'stage' GitHub Environment must require a reviewer.
+# Same artifact, no rebuild.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to promote (e.g. 0.1.5)'
+        required: true
+        type: string
+
+jobs:
+  deploy-stage:
+    runs-on: self-hosted
+    environment: stage
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download release artifact
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "v${{ inputs.version }}" `
+            -R "${{ github.repository }}" `
+            -p "*.zip" --clobber
+
+      - name: Extract
+        shell: pwsh
+        run: |
+          if (Test-Path ./extracted) { Remove-Item ./extracted -Recurse -Force }
+          Expand-Archive `
+            -Path "rms-pilot-app-${{ inputs.version }}.zip" `
+            -DestinationPath ./extracted `
+            -Force
+
+      - name: Deploy to Stage
+        shell: pwsh
+        run: pwsh -File ./deploy/deploy.ps1 -Environment stage -ArtifactPath ./extracted
