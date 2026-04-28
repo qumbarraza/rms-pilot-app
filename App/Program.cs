@@ -12,7 +12,7 @@ app.MapGet("/", () => new
     environment = pilotEnv,
     appVersion,
     sharedLibVersion = Greeter.Version,
-    greeting = Greeter.Greet("RMS pilot"),
+    greeting = Greeter.Greet("RMS pilot App Here is CICD"),
     timestamp = DateTime.UtcNow
 });
 
