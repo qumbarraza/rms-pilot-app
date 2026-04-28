@@ -46,3 +46,4 @@ jobs:
       - name: Deploy to ${{ inputs.environment }}
         shell: pwsh
         run: pwsh -File ./deploy/deploy.ps1 -Environment "${{ inputs.environment }}" -ArtifactPath "./publish"
+# touch to register workflow_dispatch with GitHub

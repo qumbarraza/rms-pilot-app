@@ -40,3 +40,4 @@ jobs:
       - name: Deploy to Prod
         shell: pwsh
         run: pwsh -File ./deploy/deploy.ps1 -Environment prod -ArtifactPath ./extracted
+# touch to register workflow_dispatch with GitHub

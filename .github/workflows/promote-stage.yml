@@ -40,3 +40,4 @@ jobs:
       - name: Deploy to Stage
         shell: pwsh
         run: pwsh -File ./deploy/deploy.ps1 -Environment stage -ArtifactPath ./extracted
+# touch to register workflow_dispatch with GitHub
